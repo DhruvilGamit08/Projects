@@ -110,7 +110,7 @@
   </div>
   <div id="panel">
     <h1>Rigid body rotation</h1>
-    <p class="sub">The soft axes are the fixed reference frame; the vivid axes and block are the body frame, rotated by the Euler angles below.</p>
+    <p class="sub">Y is vertical (up); X and Z form the horizontal directions. The labeled body axes rotate with the frame.</p>
 
     <div class="section">
       <div class="section-title">Euler angles</div>
@@ -126,17 +126,17 @@
         </select>
       </div>
       <div class="row x">
-        <label id="lbl1">Yaw (Z)</label>
+        <label id="lbl1">X (roll)</label>
         <input type="range" id="a1" min="-180" max="180" value="0" step="1">
         <span class="val" id="a1v">0°</span>
       </div>
       <div class="row y">
-        <label id="lbl2">Pitch (Y)</label>
+        <label id="lbl2">Y (yaw)</label>
         <input type="range" id="a2" min="-180" max="180" value="0" step="1">
         <span class="val" id="a2v">0°</span>
       </div>
       <div class="row z">
-        <label id="lbl3">Roll (X)</label>
+        <label id="lbl3">Z (pitch)</label>
         <input type="range" id="a3" min="-180" max="180" value="0" step="1">
         <span class="val" id="a3v">0°</span>
       </div>
@@ -257,7 +257,7 @@ ring.position.y = -1.347;
 scene.add(ring);
 
 // ---- Orbit controls (hand-rolled) ----
-let isDown=false, lastX=0, lastY=0, theta=0.85, phi=2.05, radius=6.6, target=new THREE.Vector3(0,0,0);
+let isDown=false, lastX=0, lastY=0, theta=0.65, phi=0.95, radius=6.6, target=new THREE.Vector3(0,0,0);
 function updateCam(){
   camera.position.x = target.x + radius*Math.sin(phi)*Math.sin(theta);
   camera.position.y = target.y + radius*Math.cos(phi);
@@ -330,19 +330,42 @@ function buildFrame(colors, length, radius, opacity, emissive){
   return g;
 }
 
-const palette = {x:0xff3b47, y:0x2be878, z:0x3d8bff};
+function makeAxisLabel(text, colorHex, pos){
+  const c=document.createElement('canvas'); c.width=160; c.height=80;
+  const ctx=c.getContext('2d');
+  ctx.font='700 46px Arial'; ctx.textAlign='center'; ctx.textBaseline='middle';
+  ctx.fillStyle='#05070b'; ctx.globalAlpha=0.82; ctx.roundRect(18,10,124,60,14); ctx.fill();
+  ctx.globalAlpha=1; ctx.fillStyle='#'+colorHex.toString(16).padStart(6,'0'); ctx.fillText(text,80,40);
+  const tex=new THREE.CanvasTexture(c); tex.colorSpace=THREE.SRGBColorSpace;
+  const mat=new THREE.SpriteMaterial({map:tex,transparent:true,depthTest:false});
+  const sp=new THREE.Sprite(mat); sp.position.copy(pos); sp.scale.set(0.48,0.24,1); return sp;
+}
 
-const fixedFrame = buildFrame(palette, 2.15, 0.015, 0.4, 0.35);
+// Arrow color/label remap (per user request):
+//   - top (vertical) arrow      -> "X", red
+//   - arrow that was red before -> "Z", blue
+//   - remaining (left) arrow    -> "Y", green
+// Note: buildFrame() always puts colors.x on the (1,0,0) direction,
+// colors.y on the (0,1,0)=top direction, colors.z on (0,0,1).
+// So to get the mapping above we assign the colors accordingly:
+const palette = {x:0x245aa8, y:0x9b1f2a, z:0x168a4b}; // x-dir=blue, y-dir(top)=red, z-dir=green
+
+const fixedFrame = buildFrame(palette, 2.15, 0.015, 0.38, 0.15);
 scene.add(fixedFrame);
 
-const bodyFrame = buildFrame(palette, 2.5, 0.03, 1.0, 0.85);
+const bodyFrame = buildFrame(palette, 2.5, 0.03, 1.0, 0.25);
 scene.add(bodyFrame);
+bodyFrame.add(
+  makeAxisLabel('Z', palette.x, new THREE.Vector3(2.82,0,0)),
+  makeAxisLabel('X', palette.y, new THREE.Vector3(0,2.82,0)),
+  makeAxisLabel('Y', palette.z, new THREE.Vector3(0,0,2.82))
+);
 
 // colored point lights at each body axis tip for extra vividness
 const axisGlow = (color, pos) => { const l = new THREE.PointLight(color, 0.9, 3.2); l.position.copy(pos); return l; };
-const glowX = axisGlow(0xff3b47, new THREE.Vector3(2.5,0,0));
-const glowY = axisGlow(0x2be878, new THREE.Vector3(0,2.5,0));
-const glowZ = axisGlow(0x3d8bff, new THREE.Vector3(0,0,2.5));
+const glowX = axisGlow(0x245aa8, new THREE.Vector3(2.5,0,0));   // blue, labeled Z
+const glowY = axisGlow(0x9b1f2a, new THREE.Vector3(0,2.5,0));   // red, labeled X (top)
+const glowZ = axisGlow(0x168a4b, new THREE.Vector3(0,0,2.5));
 bodyFrame.add(glowX, glowY, glowZ);
 
 // Body block: rounded-feel box with edges + subtle glass shading
@@ -386,18 +409,14 @@ const qw = document.getElementById('qw'), qx=document.getElementById('qx'), qy=d
 const axisBox = document.getElementById('axisBox');
 const colsBox = document.getElementById('cols');
 
-const axisLabels = {
-  ZYX: ['Yaw (Z)','Pitch (Y)','Roll (X)'],
-  XYZ: ['X','Y','Z'],
-  ZXZ: ['Z (φ)','X (θ)','Z (ψ)'],
-  YXZ: ['Y','X','Z'],
-  XZY: ['X','Z','Y'],
-  ZYZ: ['Z (φ)','Y (θ)','Z (ψ)']
-};
-
+// Slider a1 always drives rotation about X, a2 about Y, a3 about Z.
+// The "Order" dropdown only changes the sequence in which these three
+// fixed-axis rotations are multiplied together (intrinsic composition order),
+// it no longer reassigns which slider controls which axis.
 function updateLabels(){
-  const [l1,l2,l3] = axisLabels[orderSel.value];
-  lbl1.textContent = l1; lbl2.textContent = l2; lbl3.textContent = l3;
+  lbl1.textContent = 'X (roll)';
+  lbl2.textContent = 'Y (yaw)';
+  lbl3.textContent = 'Z (pitch)';
 }
 orderSel.addEventListener('change', ()=>{ updateLabels(); recompute(); });
 updateLabels();
@@ -418,11 +437,23 @@ function axisMatrix(axis, angle){
     c,-s,0,0,  s,c,0,0,  0,0,1,0,  0,0,0,1);
 }
 
-function computeRotation(order, r1, r2, r3){
+function computeRotation(order, rx, ry, rz){
+  // rx/ry/rz are always the angles from the X, Y, Z sliders respectively.
+  // `order` only decides the sequence the three fixed-axis matrices are
+  // multiplied in (some Euler conventions reuse an axis, e.g. ZXZ/ZYZ,
+  // which is handled below by reusing the correct angle for the repeated axis).
+  const angleFor = (axis, occurrenceIndex, order) => {
+    // For orders that use an axis twice (ZXZ, ZYZ) we still only have three
+    // sliders (X, Y, Z), so the first and second occurrence of the repeated
+    // axis both use that axis's single slider value.
+    if(axis==='X') return rx;
+    if(axis==='Y') return ry;
+    return rz;
+  };
   const axes = order.split('');
-  const M1 = axisMatrix(axes[0], r1);
-  const M2 = axisMatrix(axes[1], r2);
-  const M3 = axisMatrix(axes[2], r3);
+  const M1 = axisMatrix(axes[0], angleFor(axes[0],0,order));
+  const M2 = axisMatrix(axes[1], angleFor(axes[1],1,order));
+  const M3 = axisMatrix(axes[2], angleFor(axes[2],2,order));
   return new THREE.Matrix4().multiplyMatrices(M1, M2).multiply(M3);
 }
 
@@ -433,6 +464,7 @@ function recompute(){
   a2v.textContent = d2.toFixed(0) + '°';
   a3v.textContent = d3.toFixed(0) + '°';
 
+  // a1 = X slider, a2 = Y slider, a3 = Z slider — always.
   const M = computeRotation(order, deg2rad(d1), deg2rad(d2), deg2rad(d3));
   const e = M.elements;
   const R = [
