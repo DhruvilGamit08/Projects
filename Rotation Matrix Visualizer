@@ -1,0 +1,496 @@
+
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<title>Rigid Body Rotation Visualizer</title>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/three.js/r128/three.min.js"></script>
+<link rel="preconnect" href="https://fonts.googleapis.com">
+<link rel="preconnect" href="https://fonts.gstatic.com" crossorigin>
+<link href="https://fonts.googleapis.com/css2?family=JetBrains+Mono:wght@400;500;600;700&display=swap" rel="stylesheet">
+<style>
+  :root{
+    --bg-top:#11151d; --bg-bot:#0a0c11;
+    --panel:#141822ee; --panel2:#1b202c; --panel3:#20263380; --border:#2a3140;
+    --text:#eef0f4; --muted:#8b93a3; --accent:#5b9dff;
+    --x:#ff3b47; --y:#2be878; --z:#3d8bff;
+    --xd:#ff8c93; --yd:#8fedb0; --zd:#8cbcff;
+  }
+  html,body{margin:0;padding:0;color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"Segoe UI",Helvetica,Arial,sans-serif;
+    height:100%;overflow:hidden;}
+  #app{display:flex;height:100vh;width:100vw;background:radial-gradient(120% 120% at 30% 0%, var(--bg-top), var(--bg-bot));}
+  #viewport{flex:1;position:relative;min-width:0;}
+  #viewport canvas{display:block;}
+  #hint{position:absolute;left:18px;bottom:16px;font-size:11.5px;color:#ffffff88;
+    background:#00000055;backdrop-filter:blur(6px);padding:6px 10px;border-radius:8px;
+    border:1px solid #ffffff14;letter-spacing:.01em;pointer-events:none;}
+  #tags{position:absolute;top:0;left:0;width:100%;height:100%;pointer-events:none;}
+  .tag{position:absolute;font-size:12px;font-weight:600;transform:translate(-50%,-50%);
+    text-shadow:0 1px 4px #000a, 0 0 12px #0008;}
+
+  #panel{width:380px;flex-shrink:0;background:var(--panel);backdrop-filter:blur(10px);
+    border-left:1px solid var(--border);overflow-y:auto;padding:20px 20px 34px;box-sizing:border-box;}
+  #panel::-webkit-scrollbar{width:9px;}
+  #panel::-webkit-scrollbar-thumb{background:#333c4d;border-radius:6px;}
+  h1{font-size:15.5px;font-weight:600;margin:2px 0 5px;letter-spacing:.2px;}
+  .sub{color:var(--muted);font-size:12px;margin:0 0 20px;line-height:1.55;}
+  .section{margin-bottom:22px;}
+  .section-title{font-size:11px;text-transform:uppercase;letter-spacing:.09em;
+    color:var(--muted);margin:0 0 11px;font-weight:600;display:flex;align-items:center;gap:6px;}
+  .section-title::after{content:'';flex:1;height:1px;background:linear-gradient(90deg,var(--border),transparent);}
+
+  .row{display:flex;align-items:center;gap:10px;margin-bottom:11px;}
+  .row label{width:84px;font-size:13px;color:var(--text);flex-shrink:0;}
+  .row input[type=range]{flex:1;height:4px;-webkit-appearance:none;appearance:none;
+    background:linear-gradient(90deg,#2c3444,#2c3444);border-radius:3px;outline:none;}
+  .row input[type=range]::-webkit-slider-thumb{-webkit-appearance:none;width:18px;height:18px;
+    border-radius:50%;background:linear-gradient(135deg,#ffffff 0%,var(--accent) 28%,#7b5cff 62%,#00e5ff 100%);
+    box-shadow:0 0 0 3px #5b9dff44,0 0 14px #5b9dff99,0 0 24px #8a5cff55;
+    cursor:pointer;border:2px solid #ffffffaa;}
+  .row.x input[type=range]::-webkit-slider-thumb{background:linear-gradient(135deg,#ff5a66,#ff1744,#ff9a3d);box-shadow:0 0 0 3px #ff3b4744,0 0 14px #ff3b47aa,0 0 24px #ff7b5c66;}
+  .row.y input[type=range]::-webkit-slider-thumb{background:linear-gradient(135deg,#7dffb2,#00e676,#00ffd5);box-shadow:0 0 0 3px #2be87844,0 0 14px #2be878aa,0 0 24px #00ffd566;}
+  .row.z input[type=range]::-webkit-slider-thumb{background:linear-gradient(135deg,#72b7ff,#2979ff,#b36cff);box-shadow:0 0 0 3px #3d8bff44,0 0 14px #3d8bffaa,0 0 24px #8c6cff66;}
+  .row input[type=range]::-moz-range-thumb{width:18px;height:18px;border-radius:50%;
+    background:linear-gradient(135deg,#ffffff,#7b5cff,#00e5ff);box-shadow:0 0 14px #5b9dff99;
+    cursor:pointer;border:2px solid #ffffffaa;}
+  .row .val{width:52px;text-align:right;font-variant-numeric:tabular-nums;
+    font-size:12.5px;color:var(--muted);}
+  .row.x label{color:var(--xd);} .row.y label{color:var(--yd);} .row.z label{color:var(--zd);}
+
+  select{background:var(--panel2);color:var(--text);border:1px solid var(--border);
+    border-radius:7px;padding:8px 10px;font-size:12.5px;width:100%;}
+  .btnrow{display:flex;gap:8px;margin-top:6px;}
+  button{background:var(--panel2);color:var(--text);border:1px solid var(--border);
+    border-radius:7px;padding:8px 10px;font-size:12.5px;cursor:pointer;flex:1;
+    transition:border-color .15s, background .15s;}
+  button:hover{border-color:var(--accent);background:#212838;}
+
+  .matrixcard{background:linear-gradient(180deg,#1a2029,#161b23);border:1px solid var(--border);
+    border-radius:12px;padding:16px 8px;box-shadow:inset 0 1px 0 #ffffff08, 0 4px 14px #00000030;}
+  .matrixwrap{display:flex;align-items:stretch;justify-content:center;gap:0;}
+  .bracket{width:9px;border:2.5px solid #4a5468;border-right:none;margin:2px 0;}
+  .bracket.right{border-right:2.5px solid #4a5468;border-left:none;}
+  .mgrid{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 12px;padding:0 12px;}
+  .mcell{font-family:'JetBrains Mono',"SF Mono",Consolas,Menlo,monospace;font-size:15px;
+    letter-spacing:.01em;text-align:center;
+    padding:5px 2px;border-radius:5px;font-variant-numeric:tabular-nums;font-weight:500;
+    transition:background .12s;}
+  .mcell.diag{background:#5b9dff1c;color:#eaf2ff;font-weight:700;}
+  .mcol0{color:var(--xd);} .mcol1{color:var(--yd);} .mcol2{color:var(--zd);}
+  .mlabel-row{display:grid;grid-template-columns:repeat(3,1fr);gap:4px 12px;padding:0 12px 6px;
+    font-size:10.5px;color:var(--muted);text-transform:uppercase;letter-spacing:.06em;text-align:center;}
+  .detrow{text-align:center;font-size:11.5px;color:var(--muted);margin-top:12px;font-family:'JetBrains Mono',"SF Mono",Consolas,Menlo,monospace;}
+  .detrow b{color:#7fe3a0;font-weight:600;}
+
+  .legend{display:flex;gap:16px;font-size:12px;color:var(--muted);margin-top:10px;justify-content:center;}
+  .legend span{display:inline-flex;align-items:center;gap:6px;}
+  .dot{width:9px;height:9px;border-radius:3px;display:inline-block;}
+
+  .quatcard{background:var(--panel2);border:1px solid var(--border);border-radius:10px;
+    padding:12px 14px;}
+  .quatrow{display:flex;justify-content:space-between;font-family:'JetBrains Mono',"SF Mono",Consolas,Menlo,monospace;
+    font-size:13.5px;margin-bottom:4px;}
+  .quatrow span:first-child{color:var(--muted);}
+  .axisangle{font-size:12px;color:var(--muted);margin-top:10px;line-height:1.6;
+    border-top:1px solid var(--border);padding-top:10px;}
+  .axisangle b{color:var(--text);font-weight:500;}
+
+  .hint2{font-size:11.5px;color:var(--muted);margin-top:12px;line-height:1.55;}
+  .frameline{display:flex;align-items:center;gap:8px;font-size:12.5px;margin-bottom:6px;
+    font-family:'JetBrains Mono',"SF Mono",Consolas,Menlo,monospace;}
+  .frameline .k{width:78px;font-weight:600;font-family:-apple-system,sans-serif;}
+</style>
+</head>
+<body>
+<div id="app">
+  <div id="viewport">
+    <div id="tags"></div>
+    <div id="hint">Drag to orbit &middot; Scroll to zoom</div>
+  </div>
+  <div id="panel">
+    <h1>Rigid body rotation</h1>
+    <p class="sub">The soft axes are the fixed reference frame; the vivid axes and block are the body frame, rotated by the Euler angles below.</p>
+
+    <div class="section">
+      <div class="section-title">Euler angles</div>
+      <div class="row">
+        <label>Order</label>
+        <select id="order">
+          <option value="ZYX" selected>ZYX (yaw, pitch, roll)</option>
+          <option value="XYZ">XYZ</option>
+          <option value="ZXZ">ZXZ (classic Euler)</option>
+          <option value="YXZ">YXZ</option>
+          <option value="XZY">XZY</option>
+          <option value="ZYZ">ZYZ</option>
+        </select>
+      </div>
+      <div class="row x">
+        <label id="lbl1">Yaw (Z)</label>
+        <input type="range" id="a1" min="-180" max="180" value="0" step="1">
+        <span class="val" id="a1v">0°</span>
+      </div>
+      <div class="row y">
+        <label id="lbl2">Pitch (Y)</label>
+        <input type="range" id="a2" min="-180" max="180" value="0" step="1">
+        <span class="val" id="a2v">0°</span>
+      </div>
+      <div class="row z">
+        <label id="lbl3">Roll (X)</label>
+        <input type="range" id="a3" min="-180" max="180" value="0" step="1">
+        <span class="val" id="a3v">0°</span>
+      </div>
+      <div class="btnrow">
+        <button id="resetBtn">Reset</button>
+        <button id="randBtn">Randomize</button>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Rotation matrix R</div>
+      <div class="matrixcard">
+        <div class="mlabel-row"><span>X</span><span>Y</span><span>Z</span></div>
+        <div class="matrixwrap">
+          <div class="bracket"></div>
+          <div class="mgrid" id="matrixGrid"></div>
+          <div class="bracket right"></div>
+        </div>
+        <div class="detrow">det(R) = <b id="detVal">1.000</b> &nbsp;&middot;&nbsp; R is orthonormal</div>
+      </div>
+      <div class="legend">
+        <span><span class="dot" style="background:var(--x)"></span>X body</span>
+        <span><span class="dot" style="background:var(--y)"></span>Y body</span>
+        <span><span class="dot" style="background:var(--z)"></span>Z body</span>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Quaternion &amp; axis-angle</div>
+      <div class="quatcard">
+        <div class="quatrow"><span>w</span><span id="qw">1.000</span></div>
+        <div class="quatrow"><span>x</span><span id="qx">0.000</span></div>
+        <div class="quatrow"><span>y</span><span id="qy">0.000</span></div>
+        <div class="quatrow"><span>z</span><span id="qz">0.000</span></div>
+        <div class="axisangle" id="axisBox"></div>
+      </div>
+    </div>
+
+    <div class="section">
+      <div class="section-title">Frame vectors</div>
+      <div id="cols"></div>
+      <div class="hint2">Each column of R is where a body axis points in the fixed frame.</div>
+    </div>
+  </div>
+</div>
+
+<script>
+const viewportEl = document.getElementById('viewport');
+const scene = new THREE.Scene();
+scene.fog = new THREE.FogExp2(0x0a0c11, 0.045);
+
+const camera = new THREE.PerspectiveCamera(42, 1, 0.1, 100);
+
+const renderer = new THREE.WebGLRenderer({antialias:true, alpha:false});
+renderer.setPixelRatio(Math.min(window.devicePixelRatio, 2));
+renderer.outputEncoding = THREE.sRGBEncoding;
+renderer.toneMapping = THREE.ACESFilmicToneMapping;
+renderer.toneMappingExposure = 1.1;
+renderer.shadowMap.enabled = true;
+renderer.shadowMap.type = THREE.PCFSoftShadowMap;
+viewportEl.insertBefore(renderer.domElement, viewportEl.firstChild);
+
+function resize(){
+  const w = viewportEl.clientWidth, h = viewportEl.clientHeight;
+  renderer.setSize(w,h);
+  camera.aspect = w/h;
+  camera.updateProjectionMatrix();
+}
+window.addEventListener('resize', resize);
+
+// ---- Lighting ----
+scene.add(new THREE.HemisphereLight(0x8fb4ff, 0x0b0d12, 0.55));
+const key = new THREE.DirectionalLight(0xffffff, 1.15);
+key.position.set(5, 8, 4);
+key.castShadow = true;
+key.shadow.mapSize.set(1024,1024);
+key.shadow.camera.left=-6; key.shadow.camera.right=6;
+key.shadow.camera.top=6; key.shadow.camera.bottom=-6;
+key.shadow.bias=-0.0025;
+scene.add(key);
+const fill = new THREE.DirectionalLight(0x6f8cff, 0.35);
+fill.position.set(-6,3,-4);
+scene.add(fill);
+const rim = new THREE.PointLight(0x5b9dff, 0.6, 12);
+rim.position.set(0,3.2,-3.5);
+scene.add(rim);
+
+// ---- Floor: soft disc + fine grid, visible from underneath (worm's-eye view) ----
+const floorGeo = new THREE.CircleGeometry(6.2, 64);
+const floorMat = new THREE.MeshStandardMaterial({
+  color:0x182033, roughness:0.82, metalness:0.05, side:THREE.DoubleSide,
+  transparent:true, opacity:0.28,
+  depthWrite:false
+});
+const floor = new THREE.Mesh(floorGeo, floorMat);
+floor.rotation.x = -Math.PI/2;
+floor.position.y = -1.35;
+floor.receiveShadow = true;
+scene.add(floor);
+
+const grid = new THREE.GridHelper(6, 24, 0x3a4356, 0x1c2230);
+grid.position.y = -1.348;
+grid.material.transparent = true;
+grid.material.opacity = 0.32;
+scene.add(grid);
+// underside grid so the pattern still reads when the camera dips below the plane
+const gridUnder = new THREE.GridHelper(6, 24, 0x2c3444, 0x161b23);
+gridUnder.position.y = -1.352;
+gridUnder.material.transparent = true;
+gridUnder.material.opacity = 0.20;
+scene.add(gridUnder);
+
+const ringGeo = new THREE.RingGeometry(6.05, 6.2, 64);
+const ringMat = new THREE.MeshBasicMaterial({color:0x66708a, side:THREE.DoubleSide, transparent:true, opacity:0.42});
+const ring = new THREE.Mesh(ringGeo, ringMat);
+ring.rotation.x = -Math.PI/2;
+ring.position.y = -1.347;
+scene.add(ring);
+
+// ---- Orbit controls (hand-rolled) ----
+let isDown=false, lastX=0, lastY=0, theta=0.85, phi=2.05, radius=6.6, target=new THREE.Vector3(0,0,0);
+function updateCam(){
+  camera.position.x = target.x + radius*Math.sin(phi)*Math.sin(theta);
+  camera.position.y = target.y + radius*Math.cos(phi);
+  camera.position.z = target.z + radius*Math.sin(phi)*Math.cos(theta);
+  camera.lookAt(target);
+}
+viewportEl.addEventListener('mousedown', e=>{isDown=true; lastX=e.clientX; lastY=e.clientY;});
+window.addEventListener('mouseup', ()=>isDown=false);
+window.addEventListener('mousemove', e=>{
+  if(!isDown) return;
+  const dx=e.clientX-lastX, dy=e.clientY-lastY;
+  lastX=e.clientX; lastY=e.clientY;
+  theta -= dx*0.0065;
+  phi -= dy*0.0065;
+  phi = Math.max(0.2, Math.min(Math.PI-0.2, phi));
+  updateCam();
+});
+viewportEl.addEventListener('wheel', e=>{
+  e.preventDefault();
+  radius *= (1 + e.deltaY*0.001);
+  radius = Math.max(3.0, Math.min(15, radius));
+  updateCam();
+}, {passive:false});
+let touchStart=null;
+viewportEl.addEventListener('touchstart', e=>{ if(e.touches.length===1) touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY};});
+viewportEl.addEventListener('touchmove', e=>{
+  if(e.touches.length===1 && touchStart){
+    const dx=e.touches[0].clientX-touchStart.x, dy=e.touches[0].clientY-touchStart.y;
+    touchStart={x:e.touches[0].clientX,y:e.touches[0].clientY};
+    theta -= dx*0.0065; phi -= dy*0.0065;
+    phi = Math.max(0.2, Math.min(Math.PI-0.2, phi));
+    updateCam();
+  }
+}, {passive:true});
+
+// ---- Arrow builder: smooth shaft + crisp cone, lit materials ----
+function makeAxis(colorHex, dir, length, shaftR, opacity, emissiveStrength){
+  const group = new THREE.Group();
+  const shaftLen = length*0.82;
+  const headLen = length*0.22;
+
+  const shaftGeo = new THREE.CylinderGeometry(shaftR, shaftR*0.92, shaftLen, 20);
+  const mat = new THREE.MeshStandardMaterial({
+    color: colorHex, transparent: opacity<1, opacity,
+    roughness:0.25, metalness:0.05,
+    emissive: colorHex, emissiveIntensity: emissiveStrength
+  });
+  const shaft = new THREE.Mesh(shaftGeo, mat);
+  shaft.castShadow = opacity>=0.9;
+
+  const headGeo = new THREE.ConeGeometry(shaftR*3.2, headLen, 24);
+  const head = new THREE.Mesh(headGeo, mat);
+  head.castShadow = opacity>=0.9;
+
+  const quat = new THREE.Quaternion().setFromUnitVectors(new THREE.Vector3(0,1,0), dir.clone().normalize());
+  shaft.position.copy(dir.clone().multiplyScalar(shaftLen*0.5));
+  shaft.quaternion.copy(quat);
+  head.position.copy(dir.clone().multiplyScalar(shaftLen + headLen*0.5));
+  head.quaternion.copy(quat);
+
+  group.add(shaft, head);
+  return group;
+}
+
+function buildFrame(colors, length, radius, opacity, emissive){
+  const g = new THREE.Group();
+  g.add(makeAxis(colors.x, new THREE.Vector3(1,0,0), length, radius, opacity, emissive));
+  g.add(makeAxis(colors.y, new THREE.Vector3(0,1,0), length, radius, opacity, emissive));
+  g.add(makeAxis(colors.z, new THREE.Vector3(0,0,1), length, radius, opacity, emissive));
+  return g;
+}
+
+const palette = {x:0xff3b47, y:0x2be878, z:0x3d8bff};
+
+const fixedFrame = buildFrame(palette, 2.15, 0.015, 0.4, 0.35);
+scene.add(fixedFrame);
+
+const bodyFrame = buildFrame(palette, 2.5, 0.03, 1.0, 0.85);
+scene.add(bodyFrame);
+
+// colored point lights at each body axis tip for extra vividness
+const axisGlow = (color, pos) => { const l = new THREE.PointLight(color, 0.9, 3.2); l.position.copy(pos); return l; };
+const glowX = axisGlow(0xff3b47, new THREE.Vector3(2.5,0,0));
+const glowY = axisGlow(0x2be878, new THREE.Vector3(0,2.5,0));
+const glowZ = axisGlow(0x3d8bff, new THREE.Vector3(0,0,2.5));
+bodyFrame.add(glowX, glowY, glowZ);
+
+// Body block: rounded-feel box with edges + subtle glass shading
+const boxGeo = new THREE.BoxGeometry(0.85, 0.5, 1.3);
+const boxMat = new THREE.MeshStandardMaterial({
+  color:0x2c3448, roughness:0.4, metalness:0.25,
+  transparent:true, opacity:0.5
+});
+const boxMesh = new THREE.Mesh(boxGeo, boxMat);
+boxMesh.castShadow = true;
+const edges = new THREE.EdgesGeometry(boxGeo);
+const boxLines = new THREE.LineSegments(edges, new THREE.LineBasicMaterial({color:0x9aa5bd}));
+const bodyBox = new THREE.Group();
+bodyBox.add(boxMesh, boxLines);
+scene.add(bodyBox);
+
+// Origin marker with soft glow ring
+const originMesh = new THREE.Mesh(
+  new THREE.SphereGeometry(0.05, 20, 20),
+  new THREE.MeshStandardMaterial({color:0xffffff, emissive:0xffffff, emissiveIntensity:0.4, roughness:0.3})
+);
+scene.add(originMesh);
+
+updateCam();
+
+function animate(){
+  requestAnimationFrame(animate);
+  renderer.render(scene, camera);
+}
+resize();
+animate();
+
+// ---------------- UI logic ----------------
+const orderSel = document.getElementById('order');
+const a1 = document.getElementById('a1'), a2 = document.getElementById('a2'), a3 = document.getElementById('a3');
+const a1v = document.getElementById('a1v'), a2v = document.getElementById('a2v'), a3v = document.getElementById('a3v');
+const lbl1 = document.getElementById('lbl1'), lbl2 = document.getElementById('lbl2'), lbl3 = document.getElementById('lbl3');
+const matrixGrid = document.getElementById('matrixGrid');
+const detVal = document.getElementById('detVal');
+const qw = document.getElementById('qw'), qx=document.getElementById('qx'), qy=document.getElementById('qy'), qz=document.getElementById('qz');
+const axisBox = document.getElementById('axisBox');
+const colsBox = document.getElementById('cols');
+
+const axisLabels = {
+  ZYX: ['Yaw (Z)','Pitch (Y)','Roll (X)'],
+  XYZ: ['X','Y','Z'],
+  ZXZ: ['Z (φ)','X (θ)','Z (ψ)'],
+  YXZ: ['Y','X','Z'],
+  XZY: ['X','Z','Y'],
+  ZYZ: ['Z (φ)','Y (θ)','Z (ψ)']
+};
+
+function updateLabels(){
+  const [l1,l2,l3] = axisLabels[orderSel.value];
+  lbl1.textContent = l1; lbl2.textContent = l2; lbl3.textContent = l3;
+}
+orderSel.addEventListener('change', ()=>{ updateLabels(); recompute(); });
+updateLabels();
+
+function deg2rad(d){ return d*Math.PI/180; }
+function fmt(n){
+  const v = Math.abs(n) < 1e-9 ? 0 : n;
+  return (v>=0?' ':'') + v.toFixed(3);
+}
+
+function axisMatrix(axis, angle){
+  const c = Math.cos(angle), s = Math.sin(angle);
+  if(axis==='X') return new THREE.Matrix4().set(
+    1,0,0,0,  0,c,-s,0,  0,s,c,0,  0,0,0,1);
+  if(axis==='Y') return new THREE.Matrix4().set(
+    c,0,s,0,  0,1,0,0,  -s,0,c,0,  0,0,0,1);
+  return new THREE.Matrix4().set(
+    c,-s,0,0,  s,c,0,0,  0,0,1,0,  0,0,0,1);
+}
+
+function computeRotation(order, r1, r2, r3){
+  const axes = order.split('');
+  const M1 = axisMatrix(axes[0], r1);
+  const M2 = axisMatrix(axes[1], r2);
+  const M3 = axisMatrix(axes[2], r3);
+  return new THREE.Matrix4().multiplyMatrices(M1, M2).multiply(M3);
+}
+
+function recompute(){
+  const order = orderSel.value;
+  const d1 = parseFloat(a1.value), d2 = parseFloat(a2.value), d3 = parseFloat(a3.value);
+  a1v.textContent = d1.toFixed(0) + '°';
+  a2v.textContent = d2.toFixed(0) + '°';
+  a3v.textContent = d3.toFixed(0) + '°';
+
+  const M = computeRotation(order, deg2rad(d1), deg2rad(d2), deg2rad(d3));
+  const e = M.elements;
+  const R = [
+    [e[0], e[4], e[8]],
+    [e[1], e[5], e[9]],
+    [e[2], e[6], e[10]]
+  ];
+
+  bodyFrame.setRotationFromMatrix(M);
+  bodyBox.setRotationFromMatrix(M);
+
+  let html = '';
+  for(let i=0;i<3;i++){
+    for(let j=0;j<3;j++){
+      const isDiag = i===j;
+      html += `<div class="mcell mcol${j} ${isDiag?'diag':''}">${fmt(R[i][j])}</div>`;
+    }
+  }
+  matrixGrid.innerHTML = html;
+
+  const det = R[0][0]*(R[1][1]*R[2][2]-R[1][2]*R[2][1])
+            - R[0][1]*(R[1][0]*R[2][2]-R[1][2]*R[2][0])
+            + R[0][2]*(R[1][0]*R[2][1]-R[1][1]*R[2][0]);
+  detVal.textContent = det.toFixed(3);
+
+  const q = new THREE.Quaternion().setFromRotationMatrix(M);
+  qw.textContent = fmt(q.w); qx.textContent = fmt(q.x); qy.textContent = fmt(q.y); qz.textContent = fmt(q.z);
+
+  let angle = 2*Math.acos(Math.min(1,Math.max(-1,q.w)));
+  let sinHalf = Math.sqrt(1 - q.w*q.w);
+  let axisVec;
+  if(sinHalf < 1e-6){ axisVec = new THREE.Vector3(1,0,0); angle = 0; }
+  else axisVec = new THREE.Vector3(q.x/sinHalf, q.y/sinHalf, q.z/sinHalf);
+
+  axisBox.innerHTML = `<b>${(angle*180/Math.PI).toFixed(2)}°</b> rotation about axis
+    (${axisVec.x.toFixed(3)}, ${axisVec.y.toFixed(3)}, ${axisVec.z.toFixed(3)})`;
+
+  colsBox.innerHTML = `
+    <div class="frameline"><span class="k" style="color:var(--xd)">X_body →</span> (${fmt(R[0][0])}, ${fmt(R[1][0])}, ${fmt(R[2][0])})</div>
+    <div class="frameline"><span class="k" style="color:var(--yd)">Y_body →</span> (${fmt(R[0][1])}, ${fmt(R[1][1])}, ${fmt(R[2][1])})</div>
+    <div class="frameline"><span class="k" style="color:var(--zd)">Z_body →</span> (${fmt(R[0][2])}, ${fmt(R[1][2])}, ${fmt(R[2][2])})</div>
+  `;
+}
+
+[a1,a2,a3].forEach(el=>el.addEventListener('input', recompute));
+
+document.getElementById('resetBtn').addEventListener('click', ()=>{
+  a1.value=0; a2.value=0; a3.value=0;
+  recompute();
+});
+document.getElementById('randBtn').addEventListener('click', ()=>{
+  a1.value = Math.round((Math.random()*360-180));
+  a2.value = Math.round((Math.random()*360-180));
+  a3.value = Math.round((Math.random()*360-180));
+  recompute();
+});
+
+recompute();
+</script>
+</body>
+</html>
