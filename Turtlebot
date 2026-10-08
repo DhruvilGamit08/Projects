@@ -1,0 +1,99 @@
+nano teleop.py
+
+import os
+import time
+import numpy as np
+import mujoco
+import mujoco.viewer
+
+os.environ["GLFW_PLATFORM"] = "x11"
+
+target_linear_vel = 0.0
+target_angular_vel = 0.0
+current_linear_vel = 0.0
+current_angular_vel = 0.0
+
+WHEEL_RADIUS = 0.033
+WHEEL_SEPARATION = 0.28
+MAX_LINEAR_VEL = 0.70   # Increased max linear speed (m/s)
+MAX_ANGULAR_VEL = 1.50  # Increased max angular speed (rad/s)
+
+def key_callback(keycode):
+    global target_linear_vel, target_angular_vel
+    # Arrow keys & spacebar controls
+    if keycode == 265:    # UP Arrow
+        target_linear_vel = min(MAX_LINEAR_VEL, target_linear_vel + 0.15)
+    elif keycode == 264:  # DOWN Arrow
+        target_linear_vel = max(-MAX_LINEAR_VEL, target_linear_vel - 0.15)
+    elif keycode == 263:  # LEFT Arrow
+        target_angular_vel = min(MAX_ANGULAR_VEL, target_angular_vel + 0.40)
+    elif keycode == 262:  # RIGHT Arrow
+        target_angular_vel = max(-MAX_ANGULAR_VEL, target_angular_vel - 0.40)
+    elif keycode == 32:   # SPACEBAR (Stop)
+        target_linear_vel = 0.0
+        target_angular_vel = 0.0
+
+def add_coordinate_frame(scn, pos, mat, scale=0.3):
+    colors = [[1, 0, 0, 1], [0, 1, 0, 1], [0, 0, 1, 1]]
+    for i in range(3):
+        if scn.ngeom >= scn.maxgeom:
+            break
+        axis_dir = mat[:, i]
+        start_pos = pos
+        end_pos = pos + axis_dir * scale
+        geom = scn.geoms[scn.ngeom]
+        mujoco.mjv_initGeom(geom,
+                            type=mujoco.mjtGeom.mjGEOM_LINE,
+                            size=np.zeros(3),
+                            pos=start_pos,
+                            mat=np.eye(3).flatten(),
+                            rgba=np.array(colors[i], dtype=np.float32))
+        mujoco.mjv_connector(geom, mujoco.mjtGeom.mjGEOM_LINE, 3.0, start_pos, end_pos)
+        scn.ngeom += 1
+
+def main():
+    global current_linear_vel, current_angular_vel, target_linear_vel, target_angular_vel
+    model = mujoco.MjModel.from_xml_path("waffle_pi.xml")
+    data = mujoco.MjData(model)
+    body_id = mujoco.mj_name2id(model, mujoco.mjtObj.mjOBJ_BODY, "base_link")
+
+    print("\n--- TurtleBot3 Fast Teleop ---")
+    print("Use Arrow Keys (Up/Down/Left/Right) to move | SPACEBAR to Brake\n")
+
+    with mujoco.viewer.launch_passive(model, data, key_callback=key_callback) as viewer:
+        while viewer.is_running():
+            step_start = time.time()
+
+            # Smooth exponential decay toward target speed
+            current_linear_vel += 0.08 * (target_linear_vel - current_linear_vel)
+            current_angular_vel += 0.08 * (target_angular_vel - current_angular_vel)
+
+            # Compute differential drive wheel angular speeds (rad/s)
+            v_left = (current_linear_vel - (current_angular_vel * WHEEL_SEPARATION / 2.0)) / WHEEL_RADIUS
+            v_right = (current_linear_vel + (current_angular_vel * WHEEL_SEPARATION / 2.0)) / WHEEL_RADIUS
+
+            data.ctrl[0] = v_left
+            data.ctrl[1] = v_right
+
+            mujoco.mj_step(model, data)
+
+            pos = data.xpos[body_id]
+            rot_mat = data.xmat[body_id].reshape(3, 3)
+
+            with viewer.lock():
+                viewer.user_scn.ngeom = 0
+                add_coordinate_frame(viewer.user_scn, pos, rot_mat)
+
+            print(f"\rPosition [x,y,z]: {pos[0]:.2f}, {pos[1]:.2f}, {pos[2]:.2f} | "
+                  f"Rotation Matrix:\n{rot_mat}\n", end="\033[F\033[F\033[F")
+
+            viewer.sync()
+
+            time_until_next_step = model.opt.timestep - (time.time() - step_start)
+            if time_until_next_step > 0:
+                time.sleep(time_until_next_step)
+
+if __name__ == "__main__":
+    main()
+
+python3 teleop.py
